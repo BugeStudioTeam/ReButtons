@@ -354,8 +354,8 @@ private fun PowerButton(
     val currentExpanded by rememberUpdatedState(expanded)
     var pressed by remember { mutableStateOf(false) }
     val buttonSize = (68f * componentScale).dp
-    val outerRadius = (34f * componentScale).dp
-    val pressedRadius = (4f * componentScale).dp
+    val outerRadius = (12f * componentScale).dp
+    val pressedRadius = (12f * componentScale).dp
     val collapsedWidth = (6f * componentScale).dp
     val collapsedRadius = (3f * componentScale).dp
     val width by animateDpAsState(
