@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ReButtons</string>
+    <string name="accessibility_service_description">Shows expressive Volume Up and Volume Down controls on the screen edge.</string>
+</resources>
