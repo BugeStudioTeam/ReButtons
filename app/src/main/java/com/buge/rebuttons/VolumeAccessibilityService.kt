@@ -38,7 +38,7 @@ class VolumeAccessibilityService : AccessibilityService() {
         screenHeight = resources.displayMetrics.heightPixels
         val density = resources.displayMetrics.density
         overlayWidth = (76 * density).roundToInt()
-        overlayHeight = (236 * density).roundToInt()
+        overlayHeight = (240 * density).roundToInt()
         showOverlay()
     }
 
