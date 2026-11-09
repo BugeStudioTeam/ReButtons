@@ -3,6 +3,7 @@ package com.buge.rebuttons
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +60,8 @@ fun VolumePanel(
 
     MaterialTheme(colorScheme = scheme) {
         var expanded by remember { mutableStateOf(true) }
+        var separated by remember { mutableStateOf(true) }
+        var expanding by remember { mutableStateOf(false) }
         var interactionTick by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
 
@@ -67,6 +70,21 @@ fun VolumePanel(
                 delay(3000)
                 expanded = false
                 pressedAction = null
+            }
+        }
+
+        LaunchedEffect(expanded) {
+            if (!expanded) {
+                delay(150)
+                separated = false
+            }
+        }
+
+        LaunchedEffect(expanding) {
+            if (expanding) {
+                delay(150)
+                expanded = true
+                expanding = false
             }
         }
 
@@ -99,12 +117,18 @@ fun VolumePanel(
                     icon = Icons.Filled.KeyboardArrowUp,
                     pressed = pressedAction == VolumeAction.UP,
                     expanded = expanded,
+                    separated = separated,
                     onPressedChanged = { pressed ->
                         pressedAction = if (pressed) VolumeAction.UP else null
                     },
                     onClick = {
                         interactionTick++
-                        if (expanded) onVolumeUp() else expanded = true
+                        if (expanded) {
+                            onVolumeUp()
+                        } else {
+                            separated = true
+                            expanding = true
+                        }
                     },
                     top = true,
                 )
@@ -113,12 +137,18 @@ fun VolumePanel(
                     icon = Icons.Filled.KeyboardArrowDown,
                     pressed = pressedAction == VolumeAction.DOWN,
                     expanded = expanded,
+                    separated = separated,
                     onPressedChanged = { pressed ->
                         pressedAction = if (pressed) VolumeAction.DOWN else null
                     },
                     onClick = {
                         interactionTick++
-                        if (expanded) onVolumeDown() else expanded = true
+                        if (expanded) {
+                            onVolumeDown()
+                        } else {
+                            separated = true
+                            expanding = true
+                        }
                     },
                     top = false,
                 )
@@ -135,6 +165,7 @@ private fun ExpressiveVolumeButton(
     icon: ImageVector,
     pressed: Boolean,
     expanded: Boolean,
+    separated: Boolean,
     onPressedChanged: (Boolean) -> Unit,
     onClick: () -> Unit,
     top: Boolean,
@@ -146,6 +177,11 @@ private fun ExpressiveVolumeButton(
             stiffness = Spring.StiffnessHigh,
         ),
         label = "button width",
+    )
+    val gap by animateDpAsState(
+        targetValue = if (separated) 2.dp else 0.dp,
+        animationSpec = tween(durationMillis = 120),
+        label = "button gap",
     )
     val radius by animateDpAsState(
         targetValue = when {
@@ -169,7 +205,7 @@ private fun ExpressiveVolumeButton(
         modifier = Modifier
             .width(width)
             .height(68.dp)
-            .padding(vertical = 2.dp)
+            .padding(vertical = gap)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 shape = shape,
