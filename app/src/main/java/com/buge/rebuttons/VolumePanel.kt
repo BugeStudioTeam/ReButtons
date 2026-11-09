@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +44,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 @Composable
 fun VolumePanel(
@@ -65,6 +69,7 @@ fun VolumePanel(
         var separated by remember { mutableStateOf(true) }
         var expanding by remember { mutableStateOf(false) }
         var interactionTick by remember { mutableStateOf(0) }
+        var holdingCount by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
 
         val powerGap by animateDpAsState(
@@ -73,8 +78,8 @@ fun VolumePanel(
             label = "power spacer",
         )
 
-        LaunchedEffect(expanded, interactionTick) {
-            if (expanded) {
+        LaunchedEffect(expanded, interactionTick, holdingCount) {
+            if (expanded && holdingCount == 0) {
                 delay(3000)
                 expanded = false
                 pressedAction = null
@@ -128,15 +133,12 @@ fun VolumePanel(
                     separated = separated,
                     onPressedChanged = { pressed ->
                         pressedAction = if (pressed) VolumeAction.UP else null
+                        holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
                     },
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onVolumeUp()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
+                    onVolumeAction = onVolumeUp,
+                    onExpandRequest = {
+                        separated = true
+                        expanding = true
                     },
                     top = true,
                 )
@@ -148,15 +150,12 @@ fun VolumePanel(
                     separated = separated,
                     onPressedChanged = { pressed ->
                         pressedAction = if (pressed) VolumeAction.DOWN else null
+                        holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
                     },
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onVolumeDown()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
+                    onVolumeAction = onVolumeDown,
+                    onExpandRequest = {
+                        separated = true
+                        expanding = true
                     },
                     top = false,
                 )
@@ -165,14 +164,13 @@ fun VolumePanel(
                     description = "Power menu",
                     expanded = expanded,
                     separated = separated,
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onPowerDialog()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
+                    onPressedChanged = { pressed ->
+                        holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                    },
+                    onPowerDialog = onPowerDialog,
+                    onExpandRequest = {
+                        separated = true
+                        expanding = true
                     },
                 )
             }
@@ -190,9 +188,11 @@ private fun ExpressiveVolumeButton(
     expanded: Boolean,
     separated: Boolean,
     onPressedChanged: (Boolean) -> Unit,
-    onClick: () -> Unit,
+    onVolumeAction: () -> Unit,
+    onExpandRequest: () -> Unit,
     top: Boolean,
 ) {
+    val currentExpanded by rememberUpdatedState(expanded)
     val width by animateDpAsState(
         targetValue = if (expanded) 68.dp else 6.dp,
         animationSpec = spring(
@@ -250,11 +250,27 @@ private fun ExpressiveVolumeButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
+                    val pointerScope = this
                     awaitFirstDown(requireUnconsumed = false)
                     onPressedChanged(true)
-                    val released = waitForUpOrCancellation()
+                    val armed = currentExpanded
+                    if (armed) {
+                        onVolumeAction()
+                        coroutineScope {
+                            val repeat = launch {
+                                while (isActive) {
+                                    delay(150)
+                                    onVolumeAction()
+                                }
+                            }
+                            pointerScope.waitForUpOrCancellation()
+                            repeat.cancel()
+                        }
+                    } else {
+                        onExpandRequest()
+                        pointerScope.waitForUpOrCancellation()
+                    }
                     onPressedChanged(false)
-                    if (released != null) onClick()
                 }
             },
         contentAlignment = Alignment.Center,
@@ -274,8 +290,11 @@ private fun PowerButton(
     description: String,
     expanded: Boolean,
     separated: Boolean,
-    onClick: () -> Unit,
+    onPressedChanged: (Boolean) -> Unit,
+    onPowerDialog: () -> Unit,
+    onExpandRequest: () -> Unit,
 ) {
+    val currentExpanded by rememberUpdatedState(expanded)
     var pressed by remember { mutableStateOf(false) }
     val width by animateDpAsState(
         targetValue = if (expanded) 68.dp else 6.dp,
@@ -324,11 +343,16 @@ private fun PowerButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
+                    val pointerScope = this
                     awaitFirstDown(requireUnconsumed = false)
+                    onPressedChanged(true)
                     pressed = true
-                    val released = waitForUpOrCancellation()
+                    val armed = currentExpanded
+                    if (!armed) onExpandRequest()
+                    val released = pointerScope.waitForUpOrCancellation()
                     pressed = false
-                    if (released != null) onClick()
+                    onPressedChanged(false)
+                    if (released != null && armed) onPowerDialog()
                 }
             },
         contentAlignment = Alignment.Center,
