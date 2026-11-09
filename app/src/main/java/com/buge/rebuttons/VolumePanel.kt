@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -48,6 +52,7 @@ import kotlinx.coroutines.delay
 fun VolumePanel(
     onVolumeUp: () -> Unit,
     onVolumeDown: () -> Unit,
+    onPowerDialog: () -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     isRightEdge: Boolean,
@@ -152,6 +157,11 @@ fun VolumePanel(
                     },
                     top = false,
                 )
+                Box(modifier = Modifier.height(12.dp))
+                PowerButton(
+                    description = "Power menu",
+                    onClick = onPowerDialog,
+                )
             }
         }
     }
@@ -243,6 +253,52 @@ private fun ExpressiveVolumeButton(
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
+    }
+}
+
+@Composable
+private fun PowerButton(
+    description: String,
+    onClick: () -> Unit,
+) {
+    var pressed by remember { mutableStateOf(false) }
+    val corner by animateDpAsState(
+        targetValue = if (pressed) 8.dp else 24.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessHigh,
+        ),
+        label = "power button corner",
+    )
+    val shape: Shape = if (pressed) RoundedCornerShape(corner) else CircleShape
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = shape,
+            )
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    pressed = true
+                    val released = waitForUpOrCancellation()
+                    pressed = false
+                    if (released != null) onClick()
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.PowerSettingsNew,
+            contentDescription = description,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
     }
 }
 
