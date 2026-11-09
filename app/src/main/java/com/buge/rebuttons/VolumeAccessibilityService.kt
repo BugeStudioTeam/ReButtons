@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.animation.ValueAnimator
 import android.media.AudioManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.PixelFormat
 import android.os.Bundle
 import android.view.Gravity
@@ -32,18 +33,92 @@ class VolumeAccessibilityService : AccessibilityService() {
     private var shrunkWidth = 0
     private var shrunkHeight = 0
     private val isRightEdge = mutableStateOf(true)
+    private val componentScale = mutableStateOf(ReButtonsPreferences.DEFAULT_SCALE)
+    private val powerOnTop = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ON_TOP)
+    private val showVolume = mutableStateOf(ReButtonsPreferences.DEFAULT_VOLUME_ENABLED)
+    private val showPower = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
+    private var windowShrunk = false
+    private var snapAnimator: ValueAnimator? = null
+    private var layoutAnimator: ValueAnimator? = null
+    private lateinit var preferences: SharedPreferences
+
+    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            ReButtonsPreferences.COMPONENT_SCALE -> {
+                componentScale.value = preferences.getFloat(
+                    ReButtonsPreferences.COMPONENT_SCALE,
+                    ReButtonsPreferences.DEFAULT_SCALE,
+                )
+                updateComponentMetrics()
+                updateOverlayLayout()
+            }
+            ReButtonsPreferences.POWER_ON_TOP -> {
+                powerOnTop.value = preferences.getBoolean(
+                    ReButtonsPreferences.POWER_ON_TOP,
+                    ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
+                )
+            }
+            ReButtonsPreferences.VOLUME_ENABLED -> {
+                showVolume.value = preferences.getBoolean(
+                    ReButtonsPreferences.VOLUME_ENABLED,
+                    ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
+                )
+            }
+            ReButtonsPreferences.POWER_ENABLED -> {
+                showPower.value = preferences.getBoolean(
+                    ReButtonsPreferences.POWER_ENABLED,
+                    ReButtonsPreferences.DEFAULT_POWER_ENABLED,
+                )
+            }
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenWidth = resources.displayMetrics.widthPixels
         screenHeight = resources.displayMetrics.heightPixels
-        val density = resources.displayMetrics.density
-        expandedWidth = (76 * density).roundToInt()
-        expandedHeight = (240 * density).roundToInt()
-        shrunkWidth = (14 * density).roundToInt()
-        shrunkHeight = (228 * density).roundToInt()
+        preferences = ReButtonsPreferences.get(this)
+        preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+        componentScale.value = preferences.getFloat(
+            ReButtonsPreferences.COMPONENT_SCALE,
+            ReButtonsPreferences.DEFAULT_SCALE,
+        )
+        powerOnTop.value = preferences.getBoolean(
+            ReButtonsPreferences.POWER_ON_TOP,
+            ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
+        )
+        showVolume.value = preferences.getBoolean(
+            ReButtonsPreferences.VOLUME_ENABLED,
+            ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
+        )
+        showPower.value = preferences.getBoolean(
+            ReButtonsPreferences.POWER_ENABLED,
+            ReButtonsPreferences.DEFAULT_POWER_ENABLED,
+        )
+        updateComponentMetrics()
         showOverlay()
+    }
+
+    private fun updateComponentMetrics() {
+        val density = resources.displayMetrics.density
+        val scale = preferences.getFloat(ReButtonsPreferences.COMPONENT_SCALE, ReButtonsPreferences.DEFAULT_SCALE)
+        expandedWidth = (76 * density * scale).roundToInt()
+        expandedHeight = (240 * density * scale).roundToInt()
+        shrunkWidth = (14 * density * scale).roundToInt()
+        shrunkHeight = (228 * density * scale).roundToInt()
+    }
+
+    private fun updateOverlayLayout() {
+        if (overlay == null || layoutParams == null) return
+        val params = layoutParams ?: return
+        val width = if (windowShrunk) shrunkWidth else expandedWidth
+        val height = if (windowShrunk) shrunkHeight else expandedHeight
+        params.width = width
+        params.height = height
+        params.x = if (isRightEdge.value) screenWidth - width else 0
+        params.y = params.y.coerceIn(0, screenHeight - height)
+        overlay?.let { windowManager.updateViewLayout(it, params) }
     }
 
     private fun showOverlay() {
@@ -63,6 +138,10 @@ class VolumeAccessibilityService : AccessibilityService() {
                 isRightEdge = isRightEdge.value,
                 onCollapsed = { setWindowShrunk(true) },
                 onExpandStart = { setWindowShrunk(false) },
+                componentScale = componentScale.value,
+                powerOnTop = powerOnTop.value,
+                showVolume = showVolume.value,
+                showPower = showPower.value,
             )
         }
         val params = WindowManager.LayoutParams(
@@ -89,11 +168,42 @@ class VolumeAccessibilityService : AccessibilityService() {
         val w = if (shrunk) shrunkWidth else expandedWidth
         val h = if (shrunk) shrunkHeight else expandedHeight
         if (params.width == w && params.height == h) return
-        params.width = w
-        params.height = h
-        params.x = if (isRightEdge.value) screenWidth - w else 0
-        params.y = (screenHeight - h) / 2
-        overlay?.let { windowManager.updateViewLayout(it, params) }
+        snapAnimator?.cancel()
+        snapAnimator = null
+        layoutAnimator?.cancel()
+        layoutAnimator = null
+        val leftInset = params.x
+        val rightInset = screenWidth - (params.x + params.width)
+        val anchoredRight = params.x + params.width / 2 >= screenWidth / 2
+        val currentY = params.y
+        windowShrunk = shrunk
+        val targetX = if (anchoredRight) {
+            screenWidth - rightInset - w
+        } else {
+            leftInset
+        }
+        val endX = targetX.coerceIn(0, screenWidth - w)
+        val startX = params.x
+        val startWidth = params.width
+        val startHeight = params.height
+        val endY = currentY.coerceIn(0, screenHeight - h)
+        layoutAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 140
+            addUpdateListener { animator ->
+                val progress = animator.animatedValue as Float
+                params.x = (startX + (endX - startX) * progress).roundToInt()
+                params.y = (currentY + (endY - currentY) * progress).roundToInt()
+                params.width = (startWidth + (w - startWidth) * progress).roundToInt()
+                params.height = (startHeight + (h - startHeight) * progress).roundToInt()
+                overlay?.let { windowManager.updateViewLayout(it, params) }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (layoutAnimator === animation) layoutAnimator = null
+                }
+            })
+            start()
+        }
     }
 
     private fun dispatchVolume(keyCode: Int) {
@@ -124,12 +234,18 @@ class VolumeAccessibilityService : AccessibilityService() {
         val target = if (toRight) screenWidth - params.width else 0
         isRightEdge.value = toRight
         val start = params.x
-        ValueAnimator.ofInt(start, target).apply {
+        snapAnimator?.cancel()
+        snapAnimator = ValueAnimator.ofInt(start, target).apply {
             duration = 260
             addUpdateListener {
                 params.x = it.animatedValue as Int
                 overlay?.let { view -> windowManager.updateViewLayout(view, params) }
             }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (snapAnimator === animation) snapAnimator = null
+                }
+            })
             start()
         }
     }
@@ -139,6 +255,9 @@ class VolumeAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        if (::preferences.isInitialized) {
+            preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        }
         overlay?.let { windowManager.removeView(it) }
         overlay = null
         super.onDestroy()
