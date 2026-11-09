@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +41,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 @Composable
 fun VolumePanel(
@@ -47,6 +49,7 @@ fun VolumePanel(
     onVolumeDown: () -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
+    isRightEdge: Boolean,
 ) {
     val context = LocalContext.current
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -55,16 +58,29 @@ fun VolumePanel(
     } else MaterialTheme.colorScheme
 
     MaterialTheme(colorScheme = scheme) {
+        var expanded by remember { mutableStateOf(true) }
+        var interactionTick by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
+
+        LaunchedEffect(expanded, interactionTick) {
+            if (expanded) {
+                delay(3000)
+                expanded = false
+                pressedAction = null
+            }
+        }
+
         Surface(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(4.dp)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragEnd = onDragEnd,
                         onDragCancel = onDragEnd,
                         onDrag = { change, dragAmount ->
                             change.consume()
+                            interactionTick++
                             onDrag(dragAmount.x, dragAmount.y)
                         },
                     )
@@ -75,27 +91,35 @@ fun VolumePanel(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = if (isRightEdge) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.Center,
             ) {
                 ExpressiveVolumeButton(
                     description = "Volume up",
                     icon = Icons.Filled.KeyboardArrowUp,
                     pressed = pressedAction == VolumeAction.UP,
+                    expanded = expanded,
                     onPressedChanged = { pressed ->
                         pressedAction = if (pressed) VolumeAction.UP else null
                     },
-                    onClick = onVolumeUp,
+                    onClick = {
+                        interactionTick++
+                        if (expanded) onVolumeUp() else expanded = true
+                    },
                     top = true,
                 )
                 ExpressiveVolumeButton(
                     description = "Volume down",
                     icon = Icons.Filled.KeyboardArrowDown,
                     pressed = pressedAction == VolumeAction.DOWN,
+                    expanded = expanded,
                     onPressedChanged = { pressed ->
                         pressedAction = if (pressed) VolumeAction.DOWN else null
                     },
-                    onClick = onVolumeDown,
+                    onClick = {
+                        interactionTick++
+                        if (expanded) onVolumeDown() else expanded = true
+                    },
                     top = false,
                 )
             }
@@ -110,23 +134,40 @@ private fun ExpressiveVolumeButton(
     description: String,
     icon: ImageVector,
     pressed: Boolean,
+    expanded: Boolean,
     onPressedChanged: (Boolean) -> Unit,
     onClick: () -> Unit,
     top: Boolean,
 ) {
+    val width by animateDpAsState(
+        targetValue = if (expanded) 68.dp else 6.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumHigh,
+        ),
+        label = "button width",
+    )
     val radius by animateDpAsState(
-        targetValue = if (pressed) 34.dp else 4.dp,
+        targetValue = when {
+            !expanded -> 3.dp
+            pressed -> 34.dp
+            else -> 4.dp
+        },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
         ),
         label = "button corner radius",
     )
-    val shape = mirroredButtonShape(top = top, innerRadius = radius)
+    val shape = if (expanded) {
+        mirroredButtonShape(top = top, innerRadius = radius)
+    } else {
+        RoundedCornerShape(3.dp)
+    }
 
     Box(
         modifier = Modifier
-            .width(68.dp)
+            .width(width)
             .height(68.dp)
             .padding(vertical = 2.dp)
             .background(
@@ -148,11 +189,13 @@ private fun ExpressiveVolumeButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = description,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        if (expanded) {
+            Icon(
+                imageVector = icon,
+                contentDescription = description,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 
