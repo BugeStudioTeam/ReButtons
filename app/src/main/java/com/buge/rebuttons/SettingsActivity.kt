@@ -298,7 +298,7 @@ private fun PreviewPower(width: Dp, height: Dp, scale: Float) {
             .height(height)
             .background(
                 MaterialTheme.colorScheme.secondaryContainer,
-                RoundedCornerShape((12f * scale).dp),
+                RoundedCornerShape((34f * scale).dp),
             ),
     )
 }
