@@ -10,6 +10,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -28,6 +29,7 @@ class VolumeAccessibilityService : AccessibilityService() {
     private var screenHeight = 0
     private var overlayWidth = 0
     private var overlayHeight = 0
+    private val isRightEdge = mutableStateOf(true)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -35,8 +37,8 @@ class VolumeAccessibilityService : AccessibilityService() {
         screenWidth = resources.displayMetrics.widthPixels
         screenHeight = resources.displayMetrics.heightPixels
         val density = resources.displayMetrics.density
-        overlayWidth = (68 * density).roundToInt()
-        overlayHeight = (160 * density).roundToInt()
+        overlayWidth = (76 * density).roundToInt()
+        overlayHeight = (168 * density).roundToInt()
         showOverlay()
     }
 
@@ -53,6 +55,7 @@ class VolumeAccessibilityService : AccessibilityService() {
                 onVolumeDown = { dispatchVolume(KeyEvent.KEYCODE_VOLUME_DOWN) },
                 onDrag = { deltaX, deltaY -> moveOverlay(deltaX, deltaY) },
                 onDragEnd = { snapToNearestEdge() },
+                isRightEdge = isRightEdge.value,
             )
         }
         val params = WindowManager.LayoutParams(
@@ -92,12 +95,15 @@ class VolumeAccessibilityService : AccessibilityService() {
         val params = layoutParams ?: return
         params.x = (params.x + deltaX.roundToInt()).coerceIn(0, screenWidth - overlayWidth)
         params.y = (params.y + deltaY.roundToInt()).coerceIn(0, screenHeight - overlayHeight)
+        isRightEdge.value = params.x + overlayWidth / 2 >= screenWidth / 2
         overlay?.let { windowManager.updateViewLayout(it, params) }
     }
 
     private fun snapToNearestEdge() {
         val params = layoutParams ?: return
-        val target = if (params.x + overlayWidth / 2 < screenWidth / 2) 0 else screenWidth - overlayWidth
+        val toRight = params.x + overlayWidth / 2 >= screenWidth / 2
+        val target = if (toRight) screenWidth - overlayWidth else 0
+        isRightEdge.value = toRight
         val start = params.x
         ValueAnimator.ofInt(start, target).apply {
             duration = 260
