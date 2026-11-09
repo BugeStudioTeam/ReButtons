@@ -147,6 +147,9 @@ fun VolumePanel(
                         },
                     )
                 }
+                if (powerOnTop && showPower && showVolume) {
+                    Box(modifier = Modifier.height(powerGap))
+                }
                 if (showVolume) {
                     ExpressiveVolumeButton(
                         description = "Volume up",
@@ -184,6 +187,9 @@ fun VolumePanel(
                         },
                         top = false,
                     )
+                }
+                if (!powerOnTop && showPower && showVolume) {
+                    Box(modifier = Modifier.height(powerGap))
                 }
                 if (!powerOnTop && showPower) {
                     PowerButton(
