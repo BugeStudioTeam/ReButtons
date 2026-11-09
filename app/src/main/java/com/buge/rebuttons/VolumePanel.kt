@@ -252,23 +252,37 @@ private fun ExpressiveVolumeButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     onPressedChanged(true)
+                    val downPosition = down.position
+                    val slop = viewConfiguration.touchSlop
                     val armed = currentExpanded
                     if (armed) {
                         onVolumeAction()
                         var up = false
-                        while (!up) {
+                        var dragging = false
+                        while (!up && !dragging) {
                             val event = withTimeoutOrNull(150) { awaitPointerEvent() }
                             if (event == null) {
                                 onVolumeAction()
                             } else {
-                                if (event.changes.all { !it.pressed }) up = true
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change != null) {
+                                    if ((change.position - downPosition).getDistance() > slop) {
+                                        dragging = true
+                                    } else if (!change.pressed) {
+                                        up = true
+                                    }
+                                } else if (event.changes.all { !it.pressed }) {
+                                    up = true
+                                }
                             }
                         }
                     } else {
-                        onExpandRequest()
-                        waitForUpOrCancellation()
+                        val released = waitForUpOrCancellation()
+                        if (released != null && (released.position - downPosition).getDistance() <= slop) {
+                            onExpandRequest()
+                        }
                     }
                     onPressedChanged(false)
                 }
@@ -343,15 +357,20 @@ private fun PowerButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     onPressedChanged(true)
                     pressed = true
+                    val downPosition = down.position
+                    val slop = viewConfiguration.touchSlop
                     val armed = currentExpanded
-                    if (!armed) onExpandRequest()
                     val released = waitForUpOrCancellation()
                     pressed = false
                     onPressedChanged(false)
-                    if (released != null && armed) onPowerDialog()
+                    val isTap = released != null &&
+                        (released.position - downPosition).getDistance() <= slop
+                    if (isTap) {
+                        if (armed) onPowerDialog() else onExpandRequest()
+                    }
                 }
             },
         contentAlignment = Alignment.Center,
