@@ -38,6 +38,7 @@ class VolumeAccessibilityService : AccessibilityService() {
     private val showVolume = mutableStateOf(ReButtonsPreferences.DEFAULT_VOLUME_ENABLED)
     private val showPower = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
     private var windowShrunk = false
+    private var snapAnimator: ValueAnimator? = null
     private lateinit var preferences: SharedPreferences
 
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -166,11 +167,21 @@ class VolumeAccessibilityService : AccessibilityService() {
         val w = if (shrunk) shrunkWidth else expandedWidth
         val h = if (shrunk) shrunkHeight else expandedHeight
         if (params.width == w && params.height == h) return
+        snapAnimator?.cancel()
+        snapAnimator = null
+        val leftInset = params.x
+        val rightInset = screenWidth - (params.x + params.width)
+        val anchoredRight = params.x + params.width / 2 >= screenWidth / 2
         val currentY = params.y
         params.width = w
         params.height = h
         windowShrunk = shrunk
-        params.x = if (isRightEdge.value) screenWidth - w else 0
+        val targetX = if (anchoredRight) {
+            screenWidth - rightInset - w
+        } else {
+            leftInset
+        }
+        params.x = targetX.coerceIn(0, screenWidth - w)
         params.y = currentY.coerceIn(0, screenHeight - h)
         overlay?.let { windowManager.updateViewLayout(it, params) }
     }
@@ -203,12 +214,18 @@ class VolumeAccessibilityService : AccessibilityService() {
         val target = if (toRight) screenWidth - params.width else 0
         isRightEdge.value = toRight
         val start = params.x
-        ValueAnimator.ofInt(start, target).apply {
+        snapAnimator?.cancel()
+        snapAnimator = ValueAnimator.ofInt(start, target).apply {
             duration = 260
             addUpdateListener {
                 params.x = it.animatedValue as Int
                 overlay?.let { view -> windowManager.updateViewLayout(view, params) }
             }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (snapAnimator === animation) snapAnimator = null
+                }
+            })
             start()
         }
     }
