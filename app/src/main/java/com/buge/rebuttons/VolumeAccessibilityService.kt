@@ -38,7 +38,7 @@ class VolumeAccessibilityService : AccessibilityService() {
         screenHeight = resources.displayMetrics.heightPixels
         val density = resources.displayMetrics.density
         overlayWidth = (76 * density).roundToInt()
-        overlayHeight = (168 * density).roundToInt()
+        overlayHeight = (236 * density).roundToInt()
         showOverlay()
     }
 
@@ -53,6 +53,7 @@ class VolumeAccessibilityService : AccessibilityService() {
             VolumePanel(
                 onVolumeUp = { dispatchVolume(KeyEvent.KEYCODE_VOLUME_UP) },
                 onVolumeDown = { dispatchVolume(KeyEvent.KEYCODE_VOLUME_DOWN) },
+                onPowerDialog = { performGlobalAction(GLOBAL_ACTION_POWER_DIALOG) },
                 onDrag = { deltaX, deltaY -> moveOverlay(deltaX, deltaY) },
                 onDragEnd = { snapToNearestEdge() },
                 isRightEdge = isRightEdge.value,
