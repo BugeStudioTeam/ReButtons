@@ -33,18 +33,40 @@ class VolumeAccessibilityService : AccessibilityService() {
     private var shrunkWidth = 0
     private var shrunkHeight = 0
     private val isRightEdge = mutableStateOf(true)
-    private val showTime = mutableStateOf(true)
+    private val componentScale = mutableStateOf(ReButtonsPreferences.DEFAULT_SCALE)
+    private val powerOnTop = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ON_TOP)
+    private val showVolume = mutableStateOf(ReButtonsPreferences.DEFAULT_VOLUME_ENABLED)
+    private val showPower = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
     private var windowShrunk = false
     private lateinit var preferences: SharedPreferences
 
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         when (key) {
             ReButtonsPreferences.COMPONENT_SCALE -> {
+                componentScale.value = preferences.getFloat(
+                    ReButtonsPreferences.COMPONENT_SCALE,
+                    ReButtonsPreferences.DEFAULT_SCALE,
+                )
                 updateComponentMetrics()
                 updateOverlayLayout()
             }
-            ReButtonsPreferences.HIDE_TIME -> {
-                showTime.value = !preferences.getBoolean(ReButtonsPreferences.HIDE_TIME, false)
+            ReButtonsPreferences.POWER_ON_TOP -> {
+                powerOnTop.value = preferences.getBoolean(
+                    ReButtonsPreferences.POWER_ON_TOP,
+                    ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
+                )
+            }
+            ReButtonsPreferences.VOLUME_ENABLED -> {
+                showVolume.value = preferences.getBoolean(
+                    ReButtonsPreferences.VOLUME_ENABLED,
+                    ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
+                )
+            }
+            ReButtonsPreferences.POWER_ENABLED -> {
+                showPower.value = preferences.getBoolean(
+                    ReButtonsPreferences.POWER_ENABLED,
+                    ReButtonsPreferences.DEFAULT_POWER_ENABLED,
+                )
             }
         }
     }
@@ -56,7 +78,22 @@ class VolumeAccessibilityService : AccessibilityService() {
         screenHeight = resources.displayMetrics.heightPixels
         preferences = ReButtonsPreferences.get(this)
         preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
-        showTime.value = !preferences.getBoolean(ReButtonsPreferences.HIDE_TIME, false)
+        componentScale.value = preferences.getFloat(
+            ReButtonsPreferences.COMPONENT_SCALE,
+            ReButtonsPreferences.DEFAULT_SCALE,
+        )
+        powerOnTop.value = preferences.getBoolean(
+            ReButtonsPreferences.POWER_ON_TOP,
+            ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
+        )
+        showVolume.value = preferences.getBoolean(
+            ReButtonsPreferences.VOLUME_ENABLED,
+            ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
+        )
+        showPower.value = preferences.getBoolean(
+            ReButtonsPreferences.POWER_ENABLED,
+            ReButtonsPreferences.DEFAULT_POWER_ENABLED,
+        )
         updateComponentMetrics()
         showOverlay()
     }
@@ -99,7 +136,10 @@ class VolumeAccessibilityService : AccessibilityService() {
                 isRightEdge = isRightEdge.value,
                 onCollapsed = { setWindowShrunk(true) },
                 onExpandStart = { setWindowShrunk(false) },
-                showTime = showTime.value,
+                componentScale = componentScale.value,
+                powerOnTop = powerOnTop.value,
+                showVolume = showVolume.value,
+                showPower = showPower.value,
             )
         }
         val params = WindowManager.LayoutParams(
