@@ -195,10 +195,21 @@ private fun ExpressiveVolumeButton(
         ),
         label = "button corner radius",
     )
-    val shape = if (expanded) {
-        mirroredButtonShape(top = top, innerRadius = radius)
-    } else {
-        RoundedCornerShape(3.dp)
+    val shape: RoundedCornerShape = when {
+        expanded -> mirroredButtonShape(top = top, innerRadius = radius)
+        separated -> RoundedCornerShape(3.dp)
+        top -> RoundedCornerShape(
+            topStart = 3.dp,
+            topEnd = 3.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp,
+        )
+        else -> RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = 3.dp,
+            bottomEnd = 3.dp,
+        )
     }
 
     Box(
