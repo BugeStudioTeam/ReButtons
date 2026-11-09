@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessibilityNew
-import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
@@ -142,23 +139,7 @@ private fun ReButtonsSettingsPage() {
                 ),
             ) {
                 Column(Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.AccessibilityNew,
-                            contentDescription = "Accessibility",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp),
-                        )
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text("ReButtons controls", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Expressive accessibility panel",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                    Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(20.dp))
                     ComponentPreview(
                         scale = scale,
@@ -181,7 +162,6 @@ private fun ReButtonsSettingsPage() {
                     ListItem(
                         headlineContent = { Text("Component size") },
                         supportingContent = { Text("${(scale * 100).toInt()}% of the default size") },
-                        leadingContent = { Icon(Icons.Filled.Straighten, "Size") },
                     )
                     Slider(
                         value = scale,
@@ -208,7 +188,6 @@ private fun ReButtonsSettingsPage() {
                     ListItem(
                         headlineContent = { Text("Button order") },
                         supportingContent = { Text("Choose which control appears at the top") },
-                        leadingContent = { Text("↕", style = MaterialTheme.typography.titleLarge) },
                         trailingContent = {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(
@@ -234,7 +213,6 @@ private fun ReButtonsSettingsPage() {
                     ListItem(
                         headlineContent = { Text("Volume controls") },
                         supportingContent = { Text("Show Volume Up and Volume Down") },
-                        leadingContent = { Text("＋", style = MaterialTheme.typography.titleLarge) },
                         trailingContent = {
                             Switch(
                                 checked = volumeEnabled,
@@ -249,7 +227,6 @@ private fun ReButtonsSettingsPage() {
                     ListItem(
                         headlineContent = { Text("Power menu") },
                         supportingContent = { Text("Show the system power menu button") },
-                        leadingContent = { Text("⏻", style = MaterialTheme.typography.titleLarge) },
                         trailingContent = {
                             Switch(
                                 checked = powerEnabled,

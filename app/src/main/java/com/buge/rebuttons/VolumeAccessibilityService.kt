@@ -166,11 +166,12 @@ class VolumeAccessibilityService : AccessibilityService() {
         val w = if (shrunk) shrunkWidth else expandedWidth
         val h = if (shrunk) shrunkHeight else expandedHeight
         if (params.width == w && params.height == h) return
+        val currentY = params.y
         params.width = w
         params.height = h
         windowShrunk = shrunk
         params.x = if (isRightEdge.value) screenWidth - w else 0
-        params.y = (screenHeight - h) / 2
+        params.y = currentY.coerceIn(0, screenHeight - h)
         overlay?.let { windowManager.updateViewLayout(it, params) }
     }
 
