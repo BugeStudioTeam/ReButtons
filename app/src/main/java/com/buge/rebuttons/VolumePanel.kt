@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -34,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -69,6 +66,12 @@ fun VolumePanel(
         var expanding by remember { mutableStateOf(false) }
         var interactionTick by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
+
+        val powerGap by animateDpAsState(
+            targetValue = if (separated) 12.dp else 0.dp,
+            animationSpec = tween(durationMillis = 120),
+            label = "power spacer",
+        )
 
         LaunchedEffect(expanded, interactionTick) {
             if (expanded) {
@@ -157,10 +160,20 @@ fun VolumePanel(
                     },
                     top = false,
                 )
-                Box(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.height(powerGap))
                 PowerButton(
                     description = "Power menu",
-                    onClick = onPowerDialog,
+                    expanded = expanded,
+                    separated = separated,
+                    onClick = {
+                        interactionTick++
+                        if (expanded) {
+                            onPowerDialog()
+                        } else {
+                            separated = true
+                            expanding = true
+                        }
+                    },
                 )
             }
         }
@@ -217,8 +230,8 @@ private fun ExpressiveVolumeButton(
         else -> RoundedCornerShape(
             topStart = 0.dp,
             topEnd = 0.dp,
-            bottomStart = 3.dp,
-            bottomEnd = 3.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp,
         )
     }
 
@@ -259,22 +272,48 @@ private fun ExpressiveVolumeButton(
 @Composable
 private fun PowerButton(
     description: String,
+    expanded: Boolean,
+    separated: Boolean,
     onClick: () -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
-    val corner by animateDpAsState(
-        targetValue = if (pressed) 8.dp else 24.dp,
+    val width by animateDpAsState(
+        targetValue = if (expanded) 68.dp else 6.dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
         ),
-        label = "power button corner",
+        label = "power width",
     )
-    val shape: Shape = if (pressed) RoundedCornerShape(corner) else CircleShape
+    val gap by animateDpAsState(
+        targetValue = if (separated) 2.dp else 0.dp,
+        animationSpec = tween(durationMillis = 120),
+        label = "power gap",
+    )
+    val corner by animateDpAsState(
+        targetValue = if (pressed) 8.dp else 34.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessHigh,
+        ),
+        label = "power corner",
+    )
+    val shape: RoundedCornerShape = when {
+        expanded -> RoundedCornerShape(corner)
+        separated -> RoundedCornerShape(3.dp)
+        else -> RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = 3.dp,
+            bottomEnd = 3.dp,
+        )
+    }
 
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .width(width)
+            .height(68.dp)
+            .padding(vertical = gap)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 shape = shape,
@@ -294,11 +333,13 @@ private fun PowerButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = Icons.Filled.PowerSettingsNew,
-            contentDescription = description,
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+        if (expanded) {
+            Icon(
+                imageVector = Icons.Filled.PowerSettingsNew,
+                contentDescription = description,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 
