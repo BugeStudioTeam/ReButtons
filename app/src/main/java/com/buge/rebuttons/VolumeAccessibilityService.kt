@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.animation.ValueAnimator
 import android.media.AudioManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.PixelFormat
 import android.os.Bundle
 import android.view.Gravity
@@ -32,18 +33,53 @@ class VolumeAccessibilityService : AccessibilityService() {
     private var shrunkWidth = 0
     private var shrunkHeight = 0
     private val isRightEdge = mutableStateOf(true)
+    private val showTime = mutableStateOf(true)
+    private var windowShrunk = false
+    private lateinit var preferences: SharedPreferences
+
+    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            ReButtonsPreferences.COMPONENT_SCALE -> {
+                updateComponentMetrics()
+                updateOverlayLayout()
+            }
+            ReButtonsPreferences.HIDE_TIME -> {
+                showTime.value = !preferences.getBoolean(ReButtonsPreferences.HIDE_TIME, false)
+            }
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenWidth = resources.displayMetrics.widthPixels
         screenHeight = resources.displayMetrics.heightPixels
-        val density = resources.displayMetrics.density
-        expandedWidth = (76 * density).roundToInt()
-        expandedHeight = (240 * density).roundToInt()
-        shrunkWidth = (14 * density).roundToInt()
-        shrunkHeight = (228 * density).roundToInt()
+        preferences = ReButtonsPreferences.get(this)
+        preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
+        showTime.value = !preferences.getBoolean(ReButtonsPreferences.HIDE_TIME, false)
+        updateComponentMetrics()
         showOverlay()
+    }
+
+    private fun updateComponentMetrics() {
+        val density = resources.displayMetrics.density
+        val scale = preferences.getFloat(ReButtonsPreferences.COMPONENT_SCALE, ReButtonsPreferences.DEFAULT_SCALE)
+        expandedWidth = (76 * density * scale).roundToInt()
+        expandedHeight = (240 * density * scale).roundToInt()
+        shrunkWidth = (14 * density * scale).roundToInt()
+        shrunkHeight = (228 * density * scale).roundToInt()
+    }
+
+    private fun updateOverlayLayout() {
+        if (overlay == null || layoutParams == null) return
+        val params = layoutParams ?: return
+        val width = if (windowShrunk) shrunkWidth else expandedWidth
+        val height = if (windowShrunk) shrunkHeight else expandedHeight
+        params.width = width
+        params.height = height
+        params.x = if (isRightEdge.value) screenWidth - width else 0
+        params.y = params.y.coerceIn(0, screenHeight - height)
+        overlay?.let { windowManager.updateViewLayout(it, params) }
     }
 
     private fun showOverlay() {
@@ -63,6 +99,7 @@ class VolumeAccessibilityService : AccessibilityService() {
                 isRightEdge = isRightEdge.value,
                 onCollapsed = { setWindowShrunk(true) },
                 onExpandStart = { setWindowShrunk(false) },
+                showTime = showTime.value,
             )
         }
         val params = WindowManager.LayoutParams(
@@ -91,6 +128,7 @@ class VolumeAccessibilityService : AccessibilityService() {
         if (params.width == w && params.height == h) return
         params.width = w
         params.height = h
+        windowShrunk = shrunk
         params.x = if (isRightEdge.value) screenWidth - w else 0
         params.y = (screenHeight - h) / 2
         overlay?.let { windowManager.updateViewLayout(it, params) }
@@ -139,6 +177,9 @@ class VolumeAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        if (::preferences.isInitialized) {
+            preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        }
         overlay?.let { windowManager.removeView(it) }
         overlay = null
         super.onDestroy()

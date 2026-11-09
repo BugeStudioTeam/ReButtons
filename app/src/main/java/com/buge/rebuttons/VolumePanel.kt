@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -45,6 +46,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun VolumePanel(
@@ -56,6 +59,7 @@ fun VolumePanel(
     isRightEdge: Boolean,
     onCollapsed: () -> Unit,
     onExpandStart: () -> Unit,
+    showTime: Boolean,
 ) {
     val context = LocalContext.current
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -70,6 +74,7 @@ fun VolumePanel(
         var interactionTick by remember { mutableStateOf(0) }
         var holdingCount by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
+        var currentTime by remember { mutableStateOf("") }
 
         val powerGap by animateDpAsState(
             targetValue = if (separated) 12.dp else 0.dp,
@@ -100,6 +105,17 @@ fun VolumePanel(
                 delay(150)
                 expanded = true
                 expanding = false
+            }
+        }
+
+        LaunchedEffect(showTime) {
+            if (showTime) {
+                while (true) {
+                    currentTime = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+                    delay(30_000)
+                }
+            } else {
+                currentTime = ""
             }
         }
 
@@ -162,6 +178,14 @@ fun VolumePanel(
                     top = false,
                 )
                 Box(modifier = Modifier.height(powerGap))
+                if (showTime && expanded) {
+                    Text(
+                        text = currentTime,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
                 PowerButton(
                     description = "Power menu",
                     expanded = expanded,
