@@ -143,7 +143,7 @@ private fun ExpressiveVolumeButton(
         targetValue = if (expanded) 68.dp else 6.dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumHigh,
+            stiffness = Spring.StiffnessHigh,
         ),
         label = "button width",
     )
