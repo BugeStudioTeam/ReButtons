@@ -37,17 +37,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.awaitPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.withTimeoutOrNull
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
 @Composable
 fun VolumePanel(
@@ -250,25 +249,23 @@ private fun ExpressiveVolumeButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val pointerScope = this
                     awaitFirstDown(requireUnconsumed = false)
                     onPressedChanged(true)
                     val armed = currentExpanded
                     if (armed) {
                         onVolumeAction()
-                        coroutineScope {
-                            val repeat = launch {
-                                while (isActive) {
-                                    delay(150)
-                                    onVolumeAction()
-                                }
+                        var up = false
+                        while (!up) {
+                            val event = withTimeoutOrNull(150) { awaitPointerEvent() }
+                            if (event == null) {
+                                onVolumeAction()
+                            } else {
+                                if (event.changes.all { !it.pressed }) up = true
                             }
-                            pointerScope.waitForUpOrCancellation()
-                            repeat.cancel()
                         }
                     } else {
                         onExpandRequest()
-                        pointerScope.waitForUpOrCancellation()
+                        waitForUpOrCancellation()
                     }
                     onPressedChanged(false)
                 }
@@ -343,13 +340,12 @@ private fun PowerButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val pointerScope = this
                     awaitFirstDown(requireUnconsumed = false)
                     onPressedChanged(true)
                     pressed = true
                     val armed = currentExpanded
                     if (!armed) onExpandRequest()
-                    val released = pointerScope.waitForUpOrCancellation()
+                    val released = waitForUpOrCancellation()
                     pressed = false
                     onPressedChanged(false)
                     if (released != null && armed) onPowerDialog()
