@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,16 +15,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -31,7 +28,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -46,14 +42,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 
 class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             ReButtonsSettingsTheme {
-                ReButtonsSettingsPage(onBack = { finish() })
+                ReButtonsSettingsPage()
             }
         }
     }
@@ -75,9 +70,8 @@ private fun ReButtonsSettingsTheme(content: @Composable () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReButtonsSettingsPage(onBack: () -> Unit) {
+private fun ReButtonsSettingsPage() {
     val context = LocalContext.current
     val preferences = remember { ReButtonsPreferences.get(context) }
     var scale by remember {
@@ -127,27 +121,8 @@ private fun ReButtonsSettingsPage(onBack: () -> Unit) {
             }.apply()
         }
     }
-    val applyScale: (Float) -> Unit = { value ->
-        val snapped = (value * 4f).roundToInt() / 4f
-        scale = snapped
-        save(ReButtonsPreferences.COMPONENT_SCALE, snapped)
-    }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    Scaffold { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -164,8 +139,8 @@ private fun ReButtonsSettingsPage(onBack: () -> Unit) {
             ) {
                 Column(Modifier.padding(20.dp)) {
                     Text(
-                        "Preview",
-                        style = MaterialTheme.typography.titleMedium,
+                        "Settings",
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(20.dp))
@@ -189,11 +164,14 @@ private fun ReButtonsSettingsPage(onBack: () -> Unit) {
                 Column {
                     ListItem(
                         headlineContent = { Text("Component size") },
-                        supportingContent = { Text("${(scale * 100).roundToInt()}% of the default size") },
+                        supportingContent = { Text("${(scale * 100).toInt()}% of the default size") },
                     )
                     Slider(
                         value = scale,
-                        onValueChange = { applyScale(it) },
+                        onValueChange = {
+                            scale = it
+                            save(ReButtonsPreferences.COMPONENT_SCALE, it)
+                        },
                         valueRange = 0.75f..1.5f,
                         steps = 2,
                         modifier = Modifier.padding(horizontal = 20.dp),
@@ -241,11 +219,10 @@ private fun ReButtonsSettingsPage(onBack: () -> Unit) {
                         trailingContent = {
                             Switch(
                                 checked = volumeEnabled,
-                                enabled = volumeEnabled || powerEnabled,
-                                onCheckedChange = { checked ->
-                                    if (!checked && !powerEnabled) return@Switch
-                                    volumeEnabled = checked
-                                    save(ReButtonsPreferences.VOLUME_ENABLED, checked)
+                                enabled = powerEnabled,
+                                onCheckedChange = {
+                                    volumeEnabled = it
+                                    save(ReButtonsPreferences.VOLUME_ENABLED, it)
                                 },
                             )
                         },
@@ -256,11 +233,10 @@ private fun ReButtonsSettingsPage(onBack: () -> Unit) {
                         trailingContent = {
                             Switch(
                                 checked = powerEnabled,
-                                enabled = powerEnabled || volumeEnabled,
-                                onCheckedChange = { checked ->
-                                    if (!checked && !volumeEnabled) return@Switch
-                                    powerEnabled = checked
-                                    save(ReButtonsPreferences.POWER_ENABLED, checked)
+                                enabled = volumeEnabled,
+                                onCheckedChange = {
+                                    powerEnabled = it
+                                    save(ReButtonsPreferences.POWER_ENABLED, it)
                                 },
                             )
                         },
@@ -309,22 +285,20 @@ private fun PreviewButton(width: Dp, height: Dp, scale: Float, top: Boolean) {
     } else {
         RoundedCornerShape(topStart = inner, topEnd = inner, bottomStart = outer, bottomEnd = outer)
     }
-    androidx.compose.foundation.layout.Box(
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(width)
             .height(height)
-            .padding(horizontal = (600f - width.value).coerceAtLeast(0f).dp / 2f)
             .background(MaterialTheme.colorScheme.primaryContainer, shape),
     )
 }
 
 @Composable
 private fun PreviewPower(width: Dp, height: Dp, scale: Float) {
-    androidx.compose.foundation.layout.Box(
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(width)
             .height(height)
-            .padding(horizontal = (600f - width.value).coerceAtLeast(0f).dp / 2f)
             .background(
                 MaterialTheme.colorScheme.secondaryContainer,
                 RoundedCornerShape((34f * scale).dp),
