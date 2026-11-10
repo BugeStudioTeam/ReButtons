@@ -2,82 +2,69 @@ package com.buge.rebuttons
 
 import android.accessibilityservice.AccessibilityService
 import android.animation.ValueAnimator
+import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.SharedPreferences
-import android.graphics.PixelFormat
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
+import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlin.math.roundToInt
 
 class VolumeAccessibilityService : AccessibilityService() {
     private lateinit var windowManager: WindowManager
+    private lateinit var settings: ReButtonsSettings
     private var overlay: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var screenWidth = 0
     private var screenHeight = 0
-    private var density = 1f
+    private var preferRightEdge = true
     private val isRightEdge = mutableStateOf(true)
-    private val scaleState = mutableStateOf(ReButtonsPreferences.DEFAULT_SCALE)
-    private val powerOnTopState = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ON_TOP)
-    private val volumeEnabledState = mutableStateOf(ReButtonsPreferences.DEFAULT_VOLUME_ENABLED)
-    private val powerEnabledState = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
-    private var shrunk = false
-    private var preferences: SharedPreferences? = null
-    private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        loadPreferences()
-        applyWindowSize()
+    private val preferences = mutableStateOf(ButtonPreferences())
+
+    private val refreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            preferences.value = settings.current()
+            applyWindowMetrics()
+        }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        settings = ReButtonsSettings.get(this)
+        preferences.value = settings.current()
         screenWidth = resources.displayMetrics.widthPixels
         screenHeight = resources.displayMetrics.heightPixels
-        density = resources.displayMetrics.density
-        preferences = ReButtonsPreferences.get(this)
-        loadPreferences()
-        preferences?.registerOnSharedPreferenceChangeListener(preferenceListener)
         showOverlay()
+        ContextCompat.registerReceiver(
+            this,
+            refreshReceiver,
+            IntentFilter(SettingsActivity.ACTION_REFRESH),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
-    private fun loadPreferences() {
-        val prefs = preferences ?: return
-        scaleState.value = prefs.getFloat(
-            ReButtonsPreferences.COMPONENT_SCALE,
-            ReButtonsPreferences.DEFAULT_SCALE,
-        )
-        powerOnTopState.value = prefs.getBoolean(
-            ReButtonsPreferences.POWER_ON_TOP,
-            ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
-        )
-        val volume = prefs.getBoolean(
-            ReButtonsPreferences.VOLUME_ENABLED,
-            ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
-        )
-        val power = prefs.getBoolean(
-            ReButtonsPreferences.POWER_ENABLED,
-            ReButtonsPreferences.DEFAULT_POWER_ENABLED,
-        )
-        val safeVolume = if (!volume && !power) true else volume
-        volumeEnabledState.value = safeVolume
-        powerEnabledState.value = power
-    }
+    private fun expandedWidth(): Int = (76 * resources.displayMetrics.density * preferences.value.panelScale).roundToInt()
 
-    private fun expandedWidthPx(): Int = (76f * scaleState.value * density).roundToInt()
-    private fun expandedHeightPx(): Int = (240f * scaleState.value * density).roundToInt()
-    private fun shrunkWidthPx(): Int = (14f * scaleState.value * density).roundToInt()
-    private fun shrunkHeightPx(): Int = (228f * scaleState.value * density).roundToInt()
+    private fun expandedHeight(): Int = (240 * resources.displayMetrics.density * preferences.value.panelScale).roundToInt()
+
+    private fun shrunkWidth(): Int = (14 * resources.displayMetrics.density).roundToInt()
+
+    private fun shrunkHeight(): Int = (228 * resources.displayMetrics.density * preferences.value.panelScale).roundToInt()
 
     private fun showOverlay() {
         if (overlay != null) return
@@ -87,7 +74,9 @@ class VolumeAccessibilityService : AccessibilityService() {
         composeView.setViewTreeLifecycleOwner(owner)
         composeView.setViewTreeSavedStateRegistryOwner(owner)
         composeView.setContent {
+            val prefs = preferences.value
             VolumePanel(
+                preferences = prefs,
                 onVolumeUp = { dispatchVolume(KeyEvent.KEYCODE_VOLUME_UP) },
                 onVolumeDown = { dispatchVolume(KeyEvent.KEYCODE_VOLUME_DOWN) },
                 onPowerDialog = { performGlobalAction(GLOBAL_ACTION_POWER_DIALOG) },
@@ -96,47 +85,50 @@ class VolumeAccessibilityService : AccessibilityService() {
                 isRightEdge = isRightEdge.value,
                 onCollapsed = { setWindowShrunk(true) },
                 onExpandStart = { setWindowShrunk(false) },
-                scale = scaleState.value,
-                powerOnTop = powerOnTopState.value,
-                volumeEnabled = volumeEnabledState.value,
-                powerEnabled = powerEnabledState.value,
             )
         }
+        val w = expandedWidth()
+        val h = expandedHeight()
         val params = WindowManager.LayoutParams(
-            expandedWidthPx(),
-            expandedHeightPx(),
+            w,
+            h,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = screenWidth - expandedWidthPx()
-            y = (screenHeight - expandedHeightPx()) / 2
+            x = if (preferRightEdge) screenWidth - w else 0
+            y = (screenHeight - h) / 2
         }
         windowManager.addView(composeView, params)
         owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         overlay = composeView
         layoutParams = params
-        shrunk = false
     }
 
-    private fun applyWindowSize() {
+    private fun applyWindowMetrics() {
         val params = layoutParams ?: return
-        val w = if (shrunk) shrunkWidthPx() else expandedWidthPx()
-        val h = if (shrunk) shrunkHeightPx() else expandedHeightPx()
+        val w = expandedWidth()
+        val h = expandedHeight()
+        params.width = w
+        params.height = h
+        params.x = if (preferRightEdge) screenWidth - w else 0
+        params.y = (screenHeight - h) / 2
+        overlay?.let { windowManager.updateViewLayout(it, params) }
+    }
+
+    private fun setWindowShrunk(shrunk: Boolean) {
+        val params = layoutParams ?: return
+        val w = if (shrunk) shrunkWidth() else expandedWidth()
+        val h = if (shrunk) shrunkHeight() else expandedHeight()
+        if (params.width == w && params.height == h) return
         params.width = w
         params.height = h
         params.x = if (isRightEdge.value) screenWidth - w else 0
         params.y = (screenHeight - h) / 2
         overlay?.let { windowManager.updateViewLayout(it, params) }
-    }
-
-    private fun setWindowShrunk(shrunkValue: Boolean) {
-        if (shrunk == shrunkValue) return
-        shrunk = shrunkValue
-        applyWindowSize()
     }
 
     private fun dispatchVolume(keyCode: Int) {
@@ -166,6 +158,7 @@ class VolumeAccessibilityService : AccessibilityService() {
         val toRight = params.x + params.width / 2 >= screenWidth / 2
         val target = if (toRight) screenWidth - params.width else 0
         isRightEdge.value = toRight
+        preferRightEdge = toRight
         val start = params.x
         ValueAnimator.ofInt(start, target).apply {
             duration = 260
@@ -182,7 +175,7 @@ class VolumeAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
-        preferences?.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        runCatching { unregisterReceiver(refreshReceiver) }
         overlay?.let { windowManager.removeView(it) }
         overlay = null
         super.onDestroy()

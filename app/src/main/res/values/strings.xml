@@ -1,4 +1,12 @@
 <resources>
     <string name="app_name">ReButtons</string>
     <string name="accessibility_service_description">Restore physically damaged external Buttons at the software level!</string>
+    <string name="settings_component_size">Component size</string>
+    <string name="settings_component_size_summary">Scale the floating button panel</string>
+    <string name="settings_collapse_delay">Collapse delay</string>
+    <string name="settings_collapse_delay_summary">Auto-hide the panel after inactivity</string>
+    <string name="settings_button_order">Button order</string>
+    <string name="settings_button_order_summary">Arrange the volume and operation controls</string>
+    <string name="settings_visible_buttons">Visible buttons</string>
+    <string name="settings_visible_buttons_summary">At least one button must stay visible</string>
 </resources>
