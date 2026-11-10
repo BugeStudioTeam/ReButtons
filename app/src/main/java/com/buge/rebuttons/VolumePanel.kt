@@ -110,13 +110,12 @@ fun VolumePanel(
                 delay(140)
                 collapsedButton = true
                 onCollapsed()
-            } else {
-                collapsedButton = false
             }
         }
 
         LaunchedEffect(expanding) {
             if (expanding) {
+                collapsedButton = false
                 separated = true
                 onExpandStart()
                 delay(150)
@@ -146,6 +145,62 @@ fun VolumePanel(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = if (isRightEdge) Alignment.CenterEnd else Alignment.CenterStart,
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(vertical = (8f * scale).dp),
+                    horizontalAlignment = if (isRightEdge) Alignment.End else Alignment.Start,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    if (volumeEnabled) {
+                        ExpressiveVolumeButton(
+                            description = "Volume up",
+                            icon = Icons.Filled.KeyboardArrowUp,
+                            pressed = pressedAction == VolumeAction.UP,
+                            expanded = expanded,
+                            separated = separated,
+                            size = buttonSize,
+                            onPressedChanged = { pressed ->
+                                pressedAction = if (pressed) VolumeAction.UP else null
+                                holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                            },
+                            onVolumeAction = onVolumeUp,
+                            onExpandRequest = expandRequest,
+                            top = true,
+                        )
+                        ExpressiveVolumeButton(
+                            description = "Volume down",
+                            icon = Icons.Filled.KeyboardArrowDown,
+                            pressed = pressedAction == VolumeAction.DOWN,
+                            expanded = expanded,
+                            separated = separated,
+                            size = buttonSize,
+                            onPressedChanged = { pressed ->
+                                pressedAction = if (pressed) VolumeAction.DOWN else null
+                                holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                            },
+                            onVolumeAction = onVolumeDown,
+                            onExpandRequest = expandRequest,
+                            top = false,
+                        )
+                    }
+                    if (powerEnabled) {
+                        if (volumeEnabled) {
+                            Box(modifier = Modifier.height(powerGap))
+                        }
+                        PowerButton(
+                            description = "Power menu",
+                            expanded = expanded,
+                            separated = separated,
+                            size = buttonSize,
+                            onPressedChanged = { pressed ->
+                                holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                            },
+                            onPowerDialog = onPowerDialog,
+                            onExpandRequest = expandRequest,
+                        )
+                    }
+                }
                 if (collapsedButton) {
                     CollapsedCircle(
                         description = "Expand",
@@ -153,63 +208,6 @@ fun VolumePanel(
                         isRightEdge = isRightEdge,
                         onExpandRequest = expandRequest,
                     )
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(vertical = (8f * scale).dp),
-                        horizontalAlignment = if (isRightEdge) Alignment.End else Alignment.Start,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        if (volumeEnabled) {
-                            ExpressiveVolumeButton(
-                                description = "Volume up",
-                                icon = Icons.Filled.KeyboardArrowUp,
-                                pressed = pressedAction == VolumeAction.UP,
-                                expanded = expanded,
-                                separated = separated,
-                                size = buttonSize,
-                                onPressedChanged = { pressed ->
-                                    pressedAction = if (pressed) VolumeAction.UP else null
-                                    holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
-                                },
-                                onVolumeAction = onVolumeUp,
-                                onExpandRequest = expandRequest,
-                                top = true,
-                            )
-                            ExpressiveVolumeButton(
-                                description = "Volume down",
-                                icon = Icons.Filled.KeyboardArrowDown,
-                                pressed = pressedAction == VolumeAction.DOWN,
-                                expanded = expanded,
-                                separated = separated,
-                                size = buttonSize,
-                                onPressedChanged = { pressed ->
-                                    pressedAction = if (pressed) VolumeAction.DOWN else null
-                                    holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
-                                },
-                                onVolumeAction = onVolumeDown,
-                                onExpandRequest = expandRequest,
-                                top = false,
-                            )
-                        }
-                        if (powerEnabled) {
-                            if (volumeEnabled) {
-                                Box(modifier = Modifier.height(powerGap))
-                            }
-                            PowerButton(
-                                description = "Power menu",
-                                expanded = expanded,
-                                separated = separated,
-                                size = buttonSize,
-                                onPressedChanged = { pressed ->
-                                    holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
-                                },
-                                onPowerDialog = onPowerDialog,
-                                onExpandRequest = expandRequest,
-                            )
-                        }
-                    }
                 }
             }
         }
