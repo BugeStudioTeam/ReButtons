@@ -31,7 +31,6 @@ class VolumeAccessibilityService : AccessibilityService() {
     private val isRightEdge = mutableStateOf(true)
     private val scaleState = mutableStateOf(ReButtonsPreferences.DEFAULT_SCALE)
     private val collapseDelayState = mutableStateOf(ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY)
-    private val powerOnTopState = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ON_TOP)
     private val volumeEnabledState = mutableStateOf(ReButtonsPreferences.DEFAULT_VOLUME_ENABLED)
     private val powerEnabledState = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
     private var windowShrunk = false
@@ -59,10 +58,6 @@ class VolumeAccessibilityService : AccessibilityService() {
             ReButtonsPreferences.COLLAPSE_DELAY,
             ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY,
         )
-        powerOnTopState.value = preferences.getBoolean(
-            ReButtonsPreferences.POWER_ON_TOP,
-            ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
-        )
         volumeEnabledState.value = preferences.getBoolean(
             ReButtonsPreferences.VOLUME_ENABLED,
             ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
@@ -80,9 +75,9 @@ class VolumeAccessibilityService : AccessibilityService() {
 
     private fun expandedHeight() = ((68f * 3 + 12f + 24f) * scaleState.value * density()).roundToInt()
 
-    private fun shrunkWidth() = (14 * density() * scaleState.value).roundToInt().coerceAtLeast(1)
+    private fun circleWidth() = ((48f + 8f) * scaleState.value * density()).roundToInt().coerceAtLeast(1)
 
-    private fun shrunkHeight() = ((68f * 3 + 12f + 24f) * scaleState.value * density()).roundToInt()
+    private fun circleHeight() = circleWidth()
 
     private fun showOverlay() {
         if (overlay != null) return
@@ -101,7 +96,6 @@ class VolumeAccessibilityService : AccessibilityService() {
                 isRightEdge = isRightEdge.value,
                 scale = scaleState.value,
                 collapseDelayMs = collapseDelayState.value,
-                powerOnTop = powerOnTopState.value,
                 volumeEnabled = volumeEnabledState.value,
                 powerEnabled = powerEnabledState.value,
                 onCollapsed = { setWindowShrunk(true) },
@@ -145,8 +139,8 @@ class VolumeAccessibilityService : AccessibilityService() {
 
     private fun setWindowShrunk(shrunk: Boolean) {
         val params = layoutParams ?: return
-        val w = if (shrunk) shrunkWidth() else expandedWidth()
-        val h = if (shrunk) shrunkHeight() else expandedHeight()
+        val w = if (shrunk) circleWidth() else expandedWidth()
+        val h = if (shrunk) circleHeight() else expandedHeight()
         if (params.width == w && params.height == h) return
         val leftInset = params.x
         val rightInset = screenWidth - (params.x + params.width)
