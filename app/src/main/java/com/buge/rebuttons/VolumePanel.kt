@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
@@ -53,7 +54,11 @@ fun VolumePanel(
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     isRightEdge: Boolean,
+    scale: Float,
     collapseDelayMs: Int,
+    powerOnTop: Boolean,
+    volumeEnabled: Boolean,
+    powerEnabled: Boolean,
     onCollapsed: () -> Unit,
     onExpandStart: () -> Unit,
 ) {
@@ -70,13 +75,20 @@ fun VolumePanel(
         var interactionTick by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
 
+        val buttonSize = (68 * scale).dp
+        val slimSize = (6 * scale).dp
         val powerGap by animateDpAsState(
             targetValue = if (separated) 12.dp else 0.dp,
             animationSpec = tween(durationMillis = 120),
             label = "power spacer",
         )
 
-        LaunchedEffect(expanded, interactionTick) {
+        val expandRequest: () -> Unit = {
+            separated = true
+            expanding = true
+        }
+
+        LaunchedEffect(expanded, interactionTick, collapseDelayMs) {
             if (expanded) {
                 delay(collapseDelayMs.toLong())
                 expanded = false
@@ -126,61 +138,70 @@ fun VolumePanel(
                 horizontalAlignment = if (isRightEdge) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.Center,
             ) {
-                ExpressiveVolumeButton(
-                    description = "Volume up",
-                    icon = Icons.Filled.KeyboardArrowUp,
-                    pressed = pressedAction == VolumeAction.UP,
-                    expanded = expanded,
-                    separated = separated,
-                    onPressedChanged = { pressed ->
-                        pressedAction = if (pressed) VolumeAction.UP else null
-                    },
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onVolumeUp()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
-                    },
-                    top = true,
-                )
-                ExpressiveVolumeButton(
-                    description = "Volume down",
-                    icon = Icons.Filled.KeyboardArrowDown,
-                    pressed = pressedAction == VolumeAction.DOWN,
-                    expanded = expanded,
-                    separated = separated,
-                    onPressedChanged = { pressed ->
-                        pressedAction = if (pressed) VolumeAction.DOWN else null
-                    },
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onVolumeDown()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
-                    },
-                    top = false,
-                )
-                Box(modifier = Modifier.height(powerGap))
-                PowerButton(
-                    description = "Power menu",
-                    expanded = expanded,
-                    separated = separated,
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onPowerDialog()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
-                    },
-                )
+                if (powerEnabled && powerOnTop) {
+                    PowerButton(
+                        description = "Power menu",
+                        expanded = expanded,
+                        separated = separated,
+                        size = buttonSize,
+                        slim = slimSize,
+                        onClick = {
+                            interactionTick++
+                            if (expanded) onPowerDialog() else expandRequest()
+                        },
+                    )
+                    Box(modifier = Modifier.height(powerGap))
+                }
+                if (volumeEnabled) {
+                    ExpressiveVolumeButton(
+                        description = "Volume up",
+                        icon = Icons.Filled.KeyboardArrowUp,
+                        pressed = pressedAction == VolumeAction.UP,
+                        expanded = expanded,
+                        separated = separated,
+                        size = buttonSize,
+                        slim = slimSize,
+                        onPressedChanged = { pressed ->
+                            pressedAction = if (pressed) VolumeAction.UP else null
+                        },
+                        onClick = {
+                            interactionTick++
+                            if (expanded) onVolumeUp() else expandRequest()
+                        },
+                        top = !(powerEnabled && powerOnTop),
+                    )
+                    ExpressiveVolumeButton(
+                        description = "Volume down",
+                        icon = Icons.Filled.KeyboardArrowDown,
+                        pressed = pressedAction == VolumeAction.DOWN,
+                        expanded = expanded,
+                        separated = separated,
+                        size = buttonSize,
+                        slim = slimSize,
+                        onPressedChanged = { pressed ->
+                            pressedAction = if (pressed) VolumeAction.DOWN else null
+                        },
+                        onClick = {
+                            interactionTick++
+                            if (expanded) onVolumeDown() else expandRequest()
+                        },
+                        top = false,
+                    )
+                }
+                if (powerEnabled && !powerOnTop) {
+                    Box(modifier = Modifier.height(powerGap))
+                    PowerButton(
+                        description = "Power menu",
+                        expanded = expanded,
+                        separated = separated,
+                        size = buttonSize,
+                        slim = slimSize,
+                        onClick = {
+                            interactionTick++
+                            if (expanded) onPowerDialog() else expandRequest()
+                        },
+                    )
+                }
             }
         }
     }
@@ -195,12 +216,14 @@ private fun ExpressiveVolumeButton(
     pressed: Boolean,
     expanded: Boolean,
     separated: Boolean,
+    size: Dp,
+    slim: Dp,
     onPressedChanged: (Boolean) -> Unit,
     onClick: () -> Unit,
     top: Boolean,
 ) {
     val width by animateDpAsState(
-        targetValue = if (expanded) 68.dp else 6.dp,
+        targetValue = if (expanded) size else slim,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
@@ -215,7 +238,7 @@ private fun ExpressiveVolumeButton(
     val radius by animateDpAsState(
         targetValue = when {
             !expanded -> 3.dp
-            pressed -> 34.dp
+            pressed -> size / 2
             else -> 4.dp
         },
         animationSpec = spring(
@@ -225,7 +248,7 @@ private fun ExpressiveVolumeButton(
         label = "button corner radius",
     )
     val shape: RoundedCornerShape = when {
-        expanded -> mirroredButtonShape(top = top, innerRadius = radius)
+        expanded -> mirroredButtonShape(top = top, innerRadius = radius, outerRadius = size / 2)
         separated -> RoundedCornerShape(3.dp)
         top -> RoundedCornerShape(
             topStart = 3.dp,
@@ -244,7 +267,7 @@ private fun ExpressiveVolumeButton(
     Box(
         modifier = Modifier
             .width(width)
-            .height(68.dp)
+            .height(size)
             .padding(vertical = gap)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
@@ -280,11 +303,13 @@ private fun PowerButton(
     description: String,
     expanded: Boolean,
     separated: Boolean,
+    size: Dp,
+    slim: Dp,
     onClick: () -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
     val width by animateDpAsState(
-        targetValue = if (expanded) 68.dp else 6.dp,
+        targetValue = if (expanded) size else slim,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
@@ -297,7 +322,7 @@ private fun PowerButton(
         label = "power gap",
     )
     val corner by animateDpAsState(
-        targetValue = if (pressed) 12.dp else 34.dp,
+        targetValue = if (pressed) 12.dp else size / 2,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
@@ -318,7 +343,7 @@ private fun PowerButton(
     Box(
         modifier = Modifier
             .width(width)
-            .height(68.dp)
+            .height(size)
             .padding(vertical = gap)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
@@ -349,8 +374,7 @@ private fun PowerButton(
     }
 }
 
-private fun mirroredButtonShape(top: Boolean, innerRadius: androidx.compose.ui.unit.Dp): RoundedCornerShape {
-    val outerRadius = 34.dp
+private fun mirroredButtonShape(top: Boolean, innerRadius: Dp, outerRadius: Dp): RoundedCornerShape {
     return if (top) {
         RoundedCornerShape(
             topStart = outerRadius,

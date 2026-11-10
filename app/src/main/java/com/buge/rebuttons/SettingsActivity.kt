@@ -76,10 +76,10 @@ private fun ReButtonsSettingsPage() {
     }
     var collapseDelay by remember {
         mutableFloatStateOf(
-            preferences.getInt(
+            (preferences.getInt(
                 ReButtonsPreferences.COLLAPSE_DELAY,
                 ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY,
-            ).toFloat(),
+            ) / 1000f).coerceIn(1f, 10f),
         )
     }
     var powerOnTop by remember {
@@ -168,17 +168,16 @@ private fun ReButtonsSettingsPage() {
                     ListItem(
                         headlineContent = { Text("Collapse delay") },
                         supportingContent = {
-                            Text("Auto-hide the panel after ${(collapseDelay / 1000).toInt()} s")
+                            Text("Auto-hide the panel after ${collapseDelay.toInt()} s")
                         },
                     )
                     Slider(
                         value = collapseDelay,
                         onValueChange = {
                             collapseDelay = it
-                            save(ReButtonsPreferences.COLLAPSE_DELAY, it.toInt())
+                            save(ReButtonsPreferences.COLLAPSE_DELAY, (it.toInt() * 1000))
                         },
-                        valueRange = ReButtonsPreferences.MIN_COLLAPSE_DELAY.toFloat()..
-                            ReButtonsPreferences.MAX_COLLAPSE_DELAY.toFloat(),
+                        valueRange = 1f..10f,
                         steps = 8,
                         modifier = Modifier.padding(horizontal = 20.dp),
                     )

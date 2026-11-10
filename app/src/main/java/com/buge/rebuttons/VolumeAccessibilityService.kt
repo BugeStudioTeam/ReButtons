@@ -2,10 +2,10 @@ package com.buge.rebuttons
 
 import android.accessibilityservice.AccessibilityService
 import android.animation.ValueAnimator
-import android.media.AudioManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.PixelFormat
-import android.os.Bundle
+import android.media.AudioManager
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -23,29 +23,66 @@ import kotlin.math.roundToInt
 
 class VolumeAccessibilityService : AccessibilityService() {
     private lateinit var windowManager: WindowManager
+    private lateinit var preferences: SharedPreferences
     private var overlay: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var screenWidth = 0
     private var screenHeight = 0
-    private var expandedWidth = 0
-    private var expandedHeight = 0
-    private var shrunkWidth = 0
-    private var shrunkHeight = 0
     private val isRightEdge = mutableStateOf(true)
+    private val scaleState = mutableStateOf(ReButtonsPreferences.DEFAULT_SCALE)
+    private val collapseDelayState = mutableStateOf(ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY)
+    private val powerOnTopState = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ON_TOP)
+    private val volumeEnabledState = mutableStateOf(ReButtonsPreferences.DEFAULT_VOLUME_ENABLED)
+    private val powerEnabledState = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
     private var windowShrunk = false
+
+    private val preferenceListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> loadPreferences() }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         screenWidth = resources.displayMetrics.widthPixels
         screenHeight = resources.displayMetrics.heightPixels
-        val density = resources.displayMetrics.density
-        expandedWidth = (76 * density).roundToInt()
-        expandedHeight = (240 * density).roundToInt()
-        shrunkWidth = (14 * density).roundToInt()
-        shrunkHeight = (228 * density).roundToInt()
+        preferences = ReButtonsPreferences.get(this)
+        loadPreferences()
+        preferences.registerOnSharedPreferenceChangeListener(preferenceListener)
         showOverlay()
     }
+
+    private fun loadPreferences() {
+        scaleState.value = preferences.getFloat(
+            ReButtonsPreferences.COMPONENT_SCALE,
+            ReButtonsPreferences.DEFAULT_SCALE,
+        )
+        collapseDelayState.value = preferences.getInt(
+            ReButtonsPreferences.COLLAPSE_DELAY,
+            ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY,
+        )
+        powerOnTopState.value = preferences.getBoolean(
+            ReButtonsPreferences.POWER_ON_TOP,
+            ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
+        )
+        volumeEnabledState.value = preferences.getBoolean(
+            ReButtonsPreferences.VOLUME_ENABLED,
+            ReButtonsPreferences.DEFAULT_VOLUME_ENABLED,
+        )
+        powerEnabledState.value = preferences.getBoolean(
+            ReButtonsPreferences.POWER_ENABLED,
+            ReButtonsPreferences.DEFAULT_POWER_ENABLED,
+        )
+        applyWindowMetrics()
+    }
+
+    private fun density() = resources.displayMetrics.density
+
+    private fun expandedWidth() = ((68f * scaleState.value + 8f) * density()).roundToInt()
+
+    private fun expandedHeight() = ((68f * 3 + 12f + 24f) * scaleState.value * density()).roundToInt()
+
+    private fun shrunkWidth() = (14 * density() * scaleState.value).roundToInt().coerceAtLeast(1)
+
+    private fun shrunkHeight() = ((68f * 3 + 12f + 24f) * scaleState.value * density()).roundToInt()
 
     private fun showOverlay() {
         if (overlay != null) return
@@ -54,7 +91,6 @@ class VolumeAccessibilityService : AccessibilityService() {
         owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         composeView.setViewTreeLifecycleOwner(owner)
         composeView.setViewTreeSavedStateRegistryOwner(owner)
-        val prefs = ReButtonsPreferences.get(this)
         composeView.setContent {
             VolumePanel(
                 onVolumeUp = { dispatchVolume(KeyEvent.KEYCODE_VOLUME_UP) },
@@ -63,25 +99,28 @@ class VolumeAccessibilityService : AccessibilityService() {
                 onDrag = { deltaX, deltaY -> moveOverlay(deltaX, deltaY) },
                 onDragEnd = { snapToNearestEdge() },
                 isRightEdge = isRightEdge.value,
-                collapseDelayMs = prefs.getInt(
-                    ReButtonsPreferences.COLLAPSE_DELAY,
-                    ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY,
-                ),
+                scale = scaleState.value,
+                collapseDelayMs = collapseDelayState.value,
+                powerOnTop = powerOnTopState.value,
+                volumeEnabled = volumeEnabledState.value,
+                powerEnabled = powerEnabledState.value,
                 onCollapsed = { setWindowShrunk(true) },
                 onExpandStart = { setWindowShrunk(false) },
             )
         }
+        val w = expandedWidth()
+        val h = expandedHeight()
         val params = WindowManager.LayoutParams(
-            expandedWidth,
-            expandedHeight,
+            w,
+            h,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = screenWidth - expandedWidth
-            y = (screenHeight - expandedHeight) / 2
+            x = screenWidth - w
+            y = (screenHeight - h) / 2
         }
         windowManager.addView(composeView, params)
         owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
@@ -90,10 +129,24 @@ class VolumeAccessibilityService : AccessibilityService() {
         layoutParams = params
     }
 
+    private fun applyWindowMetrics() {
+        val params = layoutParams ?: return
+        if (windowShrunk) return
+        val w = expandedWidth()
+        val h = expandedHeight()
+        if (params.width == w && params.height == h) return
+        val anchoredRight = params.x + params.width / 2 >= screenWidth / 2
+        params.width = w
+        params.height = h
+        params.x = if (anchoredRight) screenWidth - w else 0
+        params.y = (screenHeight - h) / 2
+        overlay?.let { windowManager.updateViewLayout(it, params) }
+    }
+
     private fun setWindowShrunk(shrunk: Boolean) {
         val params = layoutParams ?: return
-        val w = if (shrunk) shrunkWidth else expandedWidth
-        val h = if (shrunk) shrunkHeight else expandedHeight
+        val w = if (shrunk) shrunkWidth() else expandedWidth()
+        val h = if (shrunk) shrunkHeight() else expandedHeight()
         if (params.width == w && params.height == h) return
         val leftInset = params.x
         val rightInset = screenWidth - (params.x + params.width)
@@ -150,6 +203,7 @@ class VolumeAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener)
         overlay?.let { windowManager.removeView(it) }
         overlay = null
         super.onDestroy()
