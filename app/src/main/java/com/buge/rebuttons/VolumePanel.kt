@@ -53,8 +53,6 @@ fun VolumePanel(
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     isRightEdge: Boolean,
-    onCollapsed: () -> Unit,
-    onExpandStart: () -> Unit,
 ) {
     val context = LocalContext.current
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -87,14 +85,11 @@ fun VolumePanel(
             if (!expanded) {
                 delay(150)
                 separated = false
-                delay(140)
-                onCollapsed()
             }
         }
 
         LaunchedEffect(expanding) {
             if (expanding) {
-                onExpandStart()
                 delay(150)
                 expanded = true
                 expanding = false
