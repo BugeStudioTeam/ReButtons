@@ -39,6 +39,7 @@ class VolumeAccessibilityService : AccessibilityService() {
     private val showPower = mutableStateOf(ReButtonsPreferences.DEFAULT_POWER_ENABLED)
     private var windowShrunk = false
     private var snapAnimator: ValueAnimator? = null
+    private var layoutAnimator: ValueAnimator? = null
     private lateinit var preferences: SharedPreferences
 
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -169,16 +170,40 @@ class VolumeAccessibilityService : AccessibilityService() {
         if (params.width == w && params.height == h) return
         snapAnimator?.cancel()
         snapAnimator = null
+        layoutAnimator?.cancel()
+        layoutAnimator = null
         val leftInset = params.x
         val rightInset = screenWidth - (params.x + params.width)
         val anchoredRight = params.x + params.width / 2 >= screenWidth / 2
+        val currentY = params.y
         windowShrunk = shrunk
-        params.width = w
-        params.height = h
-        params.x = if (anchoredRight) screenWidth - rightInset - w else leftInset
-        params.x = params.x.coerceIn(0, screenWidth - w)
-        params.y = params.y.coerceIn(0, screenHeight - h)
-        overlay?.let { windowManager.updateViewLayout(it, params) }
+        val targetX = if (anchoredRight) {
+            screenWidth - rightInset - w
+        } else {
+            leftInset
+        }
+        val endX = targetX.coerceIn(0, screenWidth - w)
+        val startX = params.x
+        val startWidth = params.width
+        val startHeight = params.height
+        val endY = currentY.coerceIn(0, screenHeight - h)
+        layoutAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 140
+            addUpdateListener { animator ->
+                val progress = animator.animatedValue as Float
+                params.x = (startX + (endX - startX) * progress).roundToInt()
+                params.y = (currentY + (endY - currentY) * progress).roundToInt()
+                params.width = (startWidth + (w - startWidth) * progress).roundToInt()
+                params.height = (startHeight + (h - startHeight) * progress).roundToInt()
+                overlay?.let { windowManager.updateViewLayout(it, params) }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (layoutAnimator === animation) layoutAnimator = null
+                }
+            })
+            start()
+        }
     }
 
     private fun dispatchVolume(keyCode: Int) {
