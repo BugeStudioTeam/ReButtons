@@ -5,7 +5,10 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,22 +31,23 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+
+private enum class PanelItem { VOLUME_UP, VOLUME_DOWN, POWER }
 
 @Composable
 fun VolumePanel(
@@ -53,6 +57,12 @@ fun VolumePanel(
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     isRightEdge: Boolean,
+    onCollapsed: () -> Unit,
+    onExpandStart: () -> Unit,
+    scale: Float,
+    powerOnTop: Boolean,
+    volumeEnabled: Boolean,
+    powerEnabled: Boolean,
 ) {
     val context = LocalContext.current
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -65,16 +75,32 @@ fun VolumePanel(
         var separated by remember { mutableStateOf(true) }
         var expanding by remember { mutableStateOf(false) }
         var interactionTick by remember { mutableStateOf(0) }
+        var holdingCount by remember { mutableStateOf(0) }
         var pressedAction by remember { mutableStateOf<VolumeAction?>(null) }
 
+        val items = remember(powerOnTop, volumeEnabled, powerEnabled) {
+            val list = mutableListOf<PanelItem>()
+            if (powerOnTop && powerEnabled) list.add(PanelItem.POWER)
+            if (volumeEnabled) {
+                list.add(PanelItem.VOLUME_UP)
+                list.add(PanelItem.VOLUME_DOWN)
+            }
+            if (!powerOnTop && powerEnabled) list.add(PanelItem.POWER)
+            if (list.isEmpty()) {
+                list.add(PanelItem.VOLUME_UP)
+                list.add(PanelItem.VOLUME_DOWN)
+            }
+            list.toList()
+        }
+
         val powerGap by animateDpAsState(
-            targetValue = if (separated) 12.dp else 0.dp,
+            targetValue = if (separated) (12f * scale).dp else 0.dp,
             animationSpec = tween(durationMillis = 120),
             label = "power spacer",
         )
 
-        LaunchedEffect(expanded, interactionTick) {
-            if (expanded) {
+        LaunchedEffect(expanded, interactionTick, holdingCount) {
+            if (expanded && holdingCount == 0) {
                 delay(3000)
                 expanded = false
                 pressedAction = null
@@ -85,11 +111,14 @@ fun VolumePanel(
             if (!expanded) {
                 delay(150)
                 separated = false
+                delay(140)
+                onCollapsed()
             }
         }
 
         LaunchedEffect(expanding) {
             if (expanding) {
+                onExpandStart()
                 delay(150)
                 expanded = true
                 expanding = false
@@ -99,7 +128,7 @@ fun VolumePanel(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(4.dp)
+                .padding((4f * scale).dp)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragEnd = onDragEnd,
@@ -116,65 +145,75 @@ fun VolumePanel(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = (8f * scale).dp),
                 horizontalAlignment = if (isRightEdge) Alignment.End else Alignment.Start,
                 verticalArrangement = Arrangement.Center,
             ) {
-                ExpressiveVolumeButton(
-                    description = "Volume up",
-                    icon = Icons.Filled.KeyboardArrowUp,
-                    pressed = pressedAction == VolumeAction.UP,
-                    expanded = expanded,
-                    separated = separated,
-                    onPressedChanged = { pressed ->
-                        pressedAction = if (pressed) VolumeAction.UP else null
-                    },
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onVolumeUp()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
-                    },
-                    top = true,
-                )
-                ExpressiveVolumeButton(
-                    description = "Volume down",
-                    icon = Icons.Filled.KeyboardArrowDown,
-                    pressed = pressedAction == VolumeAction.DOWN,
-                    expanded = expanded,
-                    separated = separated,
-                    onPressedChanged = { pressed ->
-                        pressedAction = if (pressed) VolumeAction.DOWN else null
-                    },
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onVolumeDown()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
-                    },
-                    top = false,
-                )
-                Box(modifier = Modifier.height(powerGap))
-                PowerButton(
-                    description = "Power menu",
-                    expanded = expanded,
-                    separated = separated,
-                    onClick = {
-                        interactionTick++
-                        if (expanded) {
-                            onPowerDialog()
-                        } else {
-                            separated = true
-                            expanding = true
-                        }
-                    },
-                )
+                items.forEachIndexed { index, item ->
+                    if (index > 0 && item == PanelItem.POWER) {
+                        Box(modifier = Modifier.height(powerGap))
+                    }
+                    val isFirst = index == 0
+                    val isLast = index == items.lastIndex
+                    when (item) {
+                        PanelItem.VOLUME_UP -> ExpressiveVolumeButton(
+                            description = "Volume up",
+                            icon = Icons.Filled.KeyboardArrowUp,
+                            pressed = pressedAction == VolumeAction.UP,
+                            expanded = expanded,
+                            separated = separated,
+                            isFirst = isFirst,
+                            isLast = isLast,
+                            scale = scale,
+                            onPressedChanged = { pressed ->
+                                pressedAction = if (pressed) VolumeAction.UP else null
+                                holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                            },
+                            onVolumeAction = onVolumeUp,
+                            onExpandRequest = {
+                                separated = true
+                                expanding = true
+                            },
+                            top = true,
+                        )
+                        PanelItem.VOLUME_DOWN -> ExpressiveVolumeButton(
+                            description = "Volume down",
+                            icon = Icons.Filled.KeyboardArrowDown,
+                            pressed = pressedAction == VolumeAction.DOWN,
+                            expanded = expanded,
+                            separated = separated,
+                            isFirst = isFirst,
+                            isLast = isLast,
+                            scale = scale,
+                            onPressedChanged = { pressed ->
+                                pressedAction = if (pressed) VolumeAction.DOWN else null
+                                holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                            },
+                            onVolumeAction = onVolumeDown,
+                            onExpandRequest = {
+                                separated = true
+                                expanding = true
+                            },
+                            top = false,
+                        )
+                        PanelItem.POWER -> PowerButton(
+                            description = "Power menu",
+                            expanded = expanded,
+                            separated = separated,
+                            isFirst = isFirst,
+                            isLast = isLast,
+                            scale = scale,
+                            onPressedChanged = { pressed ->
+                                holdingCount = if (pressed) holdingCount + 1 else (holdingCount - 1).coerceAtLeast(0)
+                            },
+                            onPowerDialog = onPowerDialog,
+                            onExpandRequest = {
+                                separated = true
+                                expanding = true
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -189,12 +228,18 @@ private fun ExpressiveVolumeButton(
     pressed: Boolean,
     expanded: Boolean,
     separated: Boolean,
+    isFirst: Boolean,
+    isLast: Boolean,
+    scale: Float,
     onPressedChanged: (Boolean) -> Unit,
-    onClick: () -> Unit,
+    onVolumeAction: () -> Unit,
+    onExpandRequest: () -> Unit,
     top: Boolean,
 ) {
+    val currentExpanded by rememberUpdatedState(expanded)
+    val size = (68f * scale).dp
     val width by animateDpAsState(
-        targetValue = if (expanded) 68.dp else 6.dp,
+        targetValue = if (expanded) size else (6f * scale).dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
@@ -202,15 +247,15 @@ private fun ExpressiveVolumeButton(
         label = "button width",
     )
     val gap by animateDpAsState(
-        targetValue = if (separated) 2.dp else 0.dp,
+        targetValue = if (separated) (2f * scale).dp else 0.dp,
         animationSpec = tween(durationMillis = 120),
         label = "button gap",
     )
     val radius by animateDpAsState(
         targetValue = when {
-            !expanded -> 3.dp
-            pressed -> 34.dp
-            else -> 4.dp
+            !expanded -> (3f * scale).dp
+            pressed -> (34f * scale).dp
+            else -> (4f * scale).dp
         },
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
@@ -219,26 +264,24 @@ private fun ExpressiveVolumeButton(
         label = "button corner radius",
     )
     val shape: RoundedCornerShape = when {
-        expanded -> mirroredButtonShape(top = top, innerRadius = radius)
-        separated -> RoundedCornerShape(3.dp)
-        top -> RoundedCornerShape(
-            topStart = 3.dp,
-            topEnd = 3.dp,
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp,
-        )
-        else -> RoundedCornerShape(
-            topStart = 0.dp,
-            topEnd = 0.dp,
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp,
-        )
+        expanded -> mirroredButtonShape(top = top, outer = (34f * scale).dp, inner = radius)
+        separated -> RoundedCornerShape((3f * scale).dp)
+        else -> {
+            val first = if (isFirst) (3f * scale).dp else 0.dp
+            val last = if (isLast) (3f * scale).dp else 0.dp
+            RoundedCornerShape(
+                topStart = first,
+                topEnd = first,
+                bottomStart = last,
+                bottomEnd = last,
+            )
+        }
     }
 
     Box(
         modifier = Modifier
             .width(width)
-            .height(68.dp)
+            .height(size)
             .padding(vertical = gap)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
@@ -250,11 +293,39 @@ private fun ExpressiveVolumeButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     onPressedChanged(true)
-                    val released = waitForUpOrCancellation()
+                    val downPosition = down.position
+                    val slop = viewConfiguration.touchSlop
+                    val armed = currentExpanded
+                    if (armed) {
+                        onVolumeAction()
+                        var up = false
+                        var dragging = false
+                        while (!up && !dragging) {
+                            val event = withTimeoutOrNull(150) { awaitPointerEvent() }
+                            if (event == null) {
+                                onVolumeAction()
+                            } else {
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change != null) {
+                                    if ((change.position - downPosition).getDistance() > slop) {
+                                        dragging = true
+                                    } else if (!change.pressed) {
+                                        up = true
+                                    }
+                                } else if (event.changes.all { !it.pressed }) {
+                                    up = true
+                                }
+                            }
+                        }
+                    } else {
+                        val released = waitForUpOrCancellation()
+                        if (released != null && (released.position - downPosition).getDistance() <= slop) {
+                            onExpandRequest()
+                        }
+                    }
                     onPressedChanged(false)
-                    if (released != null) onClick()
                 }
             },
         contentAlignment = Alignment.Center,
@@ -264,6 +335,7 @@ private fun ExpressiveVolumeButton(
                 imageVector = icon,
                 contentDescription = description,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.width(size).height(size),
             )
         }
     }
@@ -274,11 +346,18 @@ private fun PowerButton(
     description: String,
     expanded: Boolean,
     separated: Boolean,
-    onClick: () -> Unit,
+    isFirst: Boolean,
+    isLast: Boolean,
+    scale: Float,
+    onPressedChanged: (Boolean) -> Unit,
+    onPowerDialog: () -> Unit,
+    onExpandRequest: () -> Unit,
 ) {
+    val currentExpanded by rememberUpdatedState(expanded)
     var pressed by remember { mutableStateOf(false) }
+    val size = (68f * scale).dp
     val width by animateDpAsState(
-        targetValue = if (expanded) 68.dp else 6.dp,
+        targetValue = if (expanded) size else (6f * scale).dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
@@ -286,12 +365,12 @@ private fun PowerButton(
         label = "power width",
     )
     val gap by animateDpAsState(
-        targetValue = if (separated) 2.dp else 0.dp,
+        targetValue = if (separated) (2f * scale).dp else 0.dp,
         animationSpec = tween(durationMillis = 120),
         label = "power gap",
     )
     val corner by animateDpAsState(
-        targetValue = if (pressed) 8.dp else 34.dp,
+        targetValue = if (pressed) (8f * scale).dp else (34f * scale).dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
@@ -300,19 +379,23 @@ private fun PowerButton(
     )
     val shape: RoundedCornerShape = when {
         expanded -> RoundedCornerShape(corner)
-        separated -> RoundedCornerShape(3.dp)
-        else -> RoundedCornerShape(
-            topStart = 0.dp,
-            topEnd = 0.dp,
-            bottomStart = 3.dp,
-            bottomEnd = 3.dp,
-        )
+        separated -> RoundedCornerShape((3f * scale).dp)
+        else -> {
+            val first = if (isFirst) (3f * scale).dp else 0.dp
+            val last = if (isLast) (3f * scale).dp else 0.dp
+            RoundedCornerShape(
+                topStart = first,
+                topEnd = first,
+                bottomStart = last,
+                bottomEnd = last,
+            )
+        }
     }
 
     Box(
         modifier = Modifier
             .width(width)
-            .height(68.dp)
+            .height(size)
             .padding(vertical = gap)
             .background(
                 color = MaterialTheme.colorScheme.primaryContainer,
@@ -324,11 +407,20 @@ private fun PowerButton(
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    onPressedChanged(true)
                     pressed = true
+                    val downPosition = down.position
+                    val slop = viewConfiguration.touchSlop
+                    val armed = currentExpanded
                     val released = waitForUpOrCancellation()
                     pressed = false
-                    if (released != null) onClick()
+                    onPressedChanged(false)
+                    val isTap = released != null &&
+                        (released.position - downPosition).getDistance() <= slop
+                    if (isTap) {
+                        if (armed) onPowerDialog() else onExpandRequest()
+                    }
                 }
             },
         contentAlignment = Alignment.Center,
@@ -338,26 +430,26 @@ private fun PowerButton(
                 imageVector = Icons.Filled.PowerSettingsNew,
                 contentDescription = description,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.width(size).height(size),
             )
         }
     }
 }
 
-private fun mirroredButtonShape(top: Boolean, innerRadius: androidx.compose.ui.unit.Dp): RoundedCornerShape {
-    val outerRadius = 34.dp
+private fun mirroredButtonShape(top: Boolean, outer: Dp, inner: Dp): RoundedCornerShape {
     return if (top) {
         RoundedCornerShape(
-            topStart = outerRadius,
-            topEnd = outerRadius,
-            bottomStart = innerRadius,
-            bottomEnd = innerRadius,
+            topStart = outer,
+            topEnd = outer,
+            bottomStart = inner,
+            bottomEnd = inner,
         )
     } else {
         RoundedCornerShape(
-            topStart = innerRadius,
-            topEnd = innerRadius,
-            bottomStart = outerRadius,
-            bottomEnd = outerRadius,
+            topStart = inner,
+            topEnd = inner,
+            bottomStart = outer,
+            bottomEnd = outer,
         )
     }
 }
