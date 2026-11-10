@@ -297,7 +297,7 @@ private fun PowerButton(
         label = "power gap",
     )
     val corner by animateDpAsState(
-        targetValue = if (pressed) 8.dp else 34.dp,
+        targetValue = if (pressed) 12.dp else 34.dp,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessHigh,
