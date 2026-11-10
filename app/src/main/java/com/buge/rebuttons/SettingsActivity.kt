@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -80,14 +79,6 @@ private fun ReButtonsSettingsPage() {
                 ReButtonsPreferences.COLLAPSE_DELAY,
                 ReButtonsPreferences.DEFAULT_COLLAPSE_DELAY,
             ) / 1000f).coerceIn(1f, 10f),
-        )
-    }
-    var powerOnTop by remember {
-        mutableStateOf(
-            preferences.getBoolean(
-                ReButtonsPreferences.POWER_ON_TOP,
-                ReButtonsPreferences.DEFAULT_POWER_ON_TOP,
-            ),
         )
     }
     var volumeEnabled by remember {
@@ -192,31 +183,6 @@ private fun ReButtonsSettingsPage() {
                         Text("10 s", style = MaterialTheme.typography.labelSmall)
                     }
                     Spacer(Modifier.height(12.dp))
-                    HorizontalDivider()
-                    ListItem(
-                        headlineContent = { Text("Button order") },
-                        supportingContent = { Text("Choose which control appears at the top") },
-                        trailingContent = {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(
-                                    selected = !powerOnTop,
-                                    onClick = {
-                                        powerOnTop = false
-                                        save(ReButtonsPreferences.POWER_ON_TOP, false)
-                                    },
-                                    label = { Text("Volume") },
-                                )
-                                FilterChip(
-                                    selected = powerOnTop,
-                                    onClick = {
-                                        powerOnTop = true
-                                        save(ReButtonsPreferences.POWER_ON_TOP, true)
-                                    },
-                                    label = { Text("Menu") },
-                                )
-                            }
-                        },
-                    )
                     HorizontalDivider()
                     ListItem(
                         headlineContent = { Text("Volume controls") },
