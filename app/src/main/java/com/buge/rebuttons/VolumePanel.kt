@@ -117,6 +117,7 @@ fun VolumePanel(
 
         LaunchedEffect(expanding) {
             if (expanding) {
+                separated = true
                 onExpandStart()
                 delay(150)
                 expanded = true
