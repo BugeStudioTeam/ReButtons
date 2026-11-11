@@ -15,8 +15,8 @@ android {
         applicationId = "com.buge.rebuttons"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 28
+        versionName = "0.20.11"
     }
 
     val keystoreProperties = Properties()
